@@ -60,6 +60,16 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
     expect(pubKey).to.equal(pubAddress)
     done()
   })
+  it('getBalance of an address', function (done) {
+    BitcoinCashDepositUtils.getBalance('12tkqA9xSoowkzoERHMWNKsTey55YEBqkv', function (err, balance) {
+      if (err) console.log(err)
+      expect(balance).to.deep.equal({
+        balance: 28151.05325705,
+        unconfirmedBalance: 0
+      })
+      done(err)
+    })
+  })
   it('generate a new set of pub and priv keys', function (done) {
     let keys = BitcoinCashDepositUtils.generateNewKeys(entropy)
     expect(keys.xprv).to.equal('xprv9s21ZrQH143K3SPAc8jgfzFS4cFvbZBFCyDauH2pbBWuG2Vs1wvNAu6h6F3jsdakvPMbSdzNT6ESxnykGiQXgst5jkD21d2J5FTEiuLrxzn')

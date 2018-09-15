@@ -1,4 +1,3 @@
-
 const bch = require('bitcoincashjs')
 const bchaddr = require('bchaddrjs')
 const request = require('request')
@@ -55,10 +54,10 @@ BitcoinCashDepositUtils.prototype.getPrivateKey = function (xprv, path) {
   let privateKey = new bch.PrivateKey(child.privateKey, self.options.network)
   return privateKey.toWIF()
 
-  // const node = bch.HDNode.fromBase58(xprv, self.options.network)
-  // let child = node.derivePath("m/44'/0'/0'/0")
-  // let nodeDerivation = child.derive(0).derive(path)
-  // return nodeDerivation.keyPair.toWIF()
+// const node = bch.HDNode.fromBase58(xprv, self.options.network)
+// let child = node.derivePath("m/44'/0'/0'/0")
+// let nodeDerivation = child.derive(0).derive(path)
+// return nodeDerivation.keyPair.toWIF()
 }
 
 BitcoinCashDepositUtils.prototype.privateToPublic = function (privateKey) {
@@ -106,10 +105,21 @@ BitcoinCashDepositUtils.prototype.generateNewKeys = function (entropy) {
 }
 
 BitcoinCashDepositUtils.prototype.getXpubFromXprv = function (xprv) {
-  let self = this
   let node = new bch.HDPrivateKey(xprv)
   let child = node.derive("m/44'/145'/0'/0")
   return child.xpubkey
+}
+
+BitcoinCashDepositUtils.prototype.getBalance = function (address, done) {
+  let self = this
+  let url = self.options.insightUrl + 'addr/' + address
+  request.get({json: true, url: url}, function (err, response, body) {
+    if (!err && response.statusCode !== 200) {
+      return done(new Error('Unable to get balance from ' + url))
+    } else {
+      done(null, {balance: body.balance, unconfirmedBalance: body.unconfirmedBalance})
+    }
+  })
 }
 
 BitcoinCashDepositUtils.prototype.getUTXOs = function (xpub, path, done) {
