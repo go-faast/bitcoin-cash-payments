@@ -1,6 +1,6 @@
 {
   "name": "bitcoin-cash-payments",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "lightweight bitcoin cash payment processing with bip44",
   "main": "index.js",
   "directories": {
@@ -35,9 +35,9 @@
     "standard": "^11.0.1"
   },
   "dependencies": {
-    "bchaddrjs": "^0.2.1",
-    "bitcoincashjs": "^0.1.10",
-    "cashaddrjs": "^0.2.8",
-    "request": "^2.87.0"
+    "bchaddrjs": "0.2.1",
+    "bitcoincashjs": "0.1.10",
+    "cashaddrjs": "0.2.8",
+    "request": "2.87.0"
   }
 }
