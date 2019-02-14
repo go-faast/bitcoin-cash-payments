@@ -51,12 +51,13 @@ Get the derived xpub key from a hardened private key:
 let xpub = bitcoincashPayments.getXpubFromXprv(xprv) // for path m/44'/0'/0'/0/1234
 ```
 
-
-
-
-
 **Note:** It is suggested to generate your Private key offline with FAR more entropy than the default function, then use getXpubFromXprv.
 You have been warned!
+
+# Version History
+
+## 0.1.0
+- Move to Blockbook from Insight
 
 ## License
 

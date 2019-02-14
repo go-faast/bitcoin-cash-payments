@@ -61,11 +61,12 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
     done()
   })
   it('getBalance of an address', function (done) {
-    BitcoinCashDepositUtils.getBalance('12tkqA9xSoowkzoERHMWNKsTey55YEBqkv', function (err, balance) {
+    BitcoinCashDepositUtils.getBalance('bitcoincash:qpmh6xpzctdtu30dnm8nkgxr8tpzlsetlykfdlvuuc', function (err, balance) {
       if (err) console.log(err)
       expect(balance).to.deep.equal({
-        balance: 28151.05325705,
-        unconfirmedBalance: 0
+        balance: 50,
+        unconfirmedBalance: 0,
+        netBalance: 50
       })
       done(err)
     })
@@ -79,7 +80,6 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
     expect(BitcoinCashDepositUtils.privateToPublic(generatedWIF)).to.equal(generatedPubAddress)
     done()
   })
-
   // This test takes a long time. It really just makes sure we don't have padding
   // issues in a brute force way.
   let regress = false
@@ -111,6 +111,18 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
       })
     })
   }
+
+  // bitcoincash:qqc28g7gx8m4889ha9kzfxcuzfyt9lkq5q3lc88e4t
+  it('Get UTXOs for a single address', function (done) {
+    BitcoinCashDepositUtils.getAddressUTXOs('bitcoincash:qqn4z4d3g5kc044munahy2wt05uek333lgwszmxgzw', function (err, utxos) {
+      if (err) console.log(err)
+      expect(utxos.length).above(0)
+      console.log(utxos.length)
+      console.log(utxos)
+      done()
+    })
+  })
+  return
   let getUTXOs = true
   let currentUTXO = {}
   let currentSignedTx = {}
