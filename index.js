@@ -34,19 +34,16 @@ function BitcoinCashDepositUtils (options) {
   return self
 }
 
+/* Client Permitted */
 BitcoinCashDepositUtils.prototype.bip44 = function (xpub, path) {
   let self = this
   let node = new bch.HDPublicKey(xpub)
   let child = node.derive('m/0').derive(path)
   let address = new bch.Address(child.publicKey, self.options.network)
-  let addrstr = address.toString(CASH_ADDR_FORMAT).split(':')
-  if (addrstr.length === 2) {
-    return addrstr[1]
-  } else {
-    return new Error('Unable to derive cash address for ' + address)
-  }
+  return address.toString(CASH_ADDR_FORMAT)
 }
 
+/* Client Permitted */
 BitcoinCashDepositUtils.prototype.getPrivateKey = function (xprv, path) {
   let self = this
   if (!xprv) throw new Error('Xprv is null. Bad things will happen to you.')
@@ -56,23 +53,25 @@ BitcoinCashDepositUtils.prototype.getPrivateKey = function (xprv, path) {
   return privateKey.toWIF()
 }
 
+/* Client Permitted */
 BitcoinCashDepositUtils.prototype.privateToPublic = function (privateKey) {
   let self = this
   let PrivateKey = bch.PrivateKey
   let address = PrivateKey.fromWIF(privateKey).toAddress(self.options.network)
-  let addrstr = address.toString(CASH_ADDR_FORMAT).split(':')
-  if (addrstr.length === 2) {
-    return addrstr[1]
-  } else {
-    return new Error('Unable to derive cash address for ' + privateKey)
-  }
+  return address.toString(CASH_ADDR_FORMAT)
 }
 
+/* Client Permitted */
 // Convert a bitcoincash address to a standard address
 BitcoinCashDepositUtils.prototype.standardizeAddress = function (address) {
+  return standardizeAddress(address)
+}
+
+function standardizeAddress (address) {
   return bchaddr.toLegacyAddress(address)
 }
 
+/* Client Permitted */
 // Convert a bitcoincash address to a standard address
 BitcoinCashDepositUtils.prototype.validateAddress = function (address) {
   /*
@@ -91,6 +90,7 @@ BitcoinCashDepositUtils.prototype.validateAddress = function (address) {
   return resp
 }
 
+/* Client Permitted */
 BitcoinCashDepositUtils.prototype.generateNewKeys = function (entropy) {
   let self = this
   var root = bch.HDPrivateKey.fromSeed(entropy, self.options.network)
@@ -100,12 +100,14 @@ BitcoinCashDepositUtils.prototype.generateNewKeys = function (entropy) {
   }
 }
 
+/* Client Permitted */
 BitcoinCashDepositUtils.prototype.getXpubFromXprv = function (xprv) {
   let node = new bch.HDPrivateKey(xprv)
   let child = node.derive("m/44'/145'/0'/0")
   return child.xpubkey
 }
 
+/* WARN: Remote request - Don't run on light client. */
 BitcoinCashDepositUtils.prototype.getBalance = function (address, done) {
   let self = this
   let url = selectRandomURL(self) + 'api/address/' + address
@@ -130,67 +132,144 @@ BitcoinCashDepositUtils.prototype.getBalance = function (address, done) {
 
 function round8 (num) { return Math.round(num * 1e8) / 1e8 }
 
+/* WARN: Remote request - Don't run on light client. */
 BitcoinCashDepositUtils.prototype.getUTXOs = function (xpub, path, done) {
   let self = this
   let address = self.bip44(xpub, path)
   return self.getAddressUTXOs(address, done)
 }
 
-// WARN: We only look at the first 1000 transactions. This is a pretty expensive
+/* WARN: Remote request - Don't run on light client. */
+// We only look at the first 1000 transactions. This is a pretty expensive
 // query for busy addresses. Sorry Slush!
 BitcoinCashDepositUtils.prototype.getAddressUTXOs = function (address, done) {
   let self = this
   let url = selectRandomURL(self) + 'api/address/' + address
+
+  // 1. Get the Transaction history.
   request.get({json: true, url: url}, function (err, response, body) {
     if (!err && response.statusCode !== 200) {
       return done(new Error('Unable to get UTXOs from ' + url))
     } else {
       let asyncTasks = []
+
+      // 2. For each transaction in the history, get the transaction
       body.transactions.forEach(function (txid) {
         asyncTasks.push(function (cb) {
           let url = selectRandomURL(self) + 'api/tx/' + txid
           request.get({json: true, url: url}, function (err, response, body) {
-            let txUTXOs = []
+            let txUTXOs = {}
+            let spentUnconfirmed = {}
             if (!err && response.statusCode !== 200) {
               return cb(new Error('Unable to get UTXOs from ' + url))
             } else {
-              if (body.vout && body.vout.length > 0) {
-                body.vout.forEach(function (vout) {
-                  // Is UNSPENT and to the Address in question
-                  if (vout.spent === false && vout.scriptPubKey.addresses[0] === address) {
-                    txUTXOs.push({
-                      txId: txid,
-                      outputIndex: vout.n,
-                      script: vout.scriptPubKey.hex,
-                      address: self.standardizeAddress(address),
-                      amount: parseFloat(vout.value),
-                      satoshis: valueToSatoshis(vout.value)
-                    })
-                  }
-                })
+              // 3. Loop through the outputs of each transaction
+              if (body && body.vout && body.vout.length > 0) {
+                txUTXOs = getOutputsFromTransaction(body, address)
+                if (body.confirmations === 0) {
+                  // We should keep track of any inputs that may be spent, but unconfirmed.
+                  spentUnconfirmed = getSpentUTXOsFromTransaction(body)
+                }
               }
             }
-            cb(null, txUTXOs)
+            cb(null, {txUTXOs, spentUnconfirmed})
           })
         })
       })
-      async.parallel(asyncTasks, function (err, utxos) {
+      async.parallel(asyncTasks, function (err, results) {
         if (err) {
           return done(new Error('Unable to get UTXOs ' + err))
         } else {
-          let cleanUTXOs = []
-          utxos.forEach(function (utxo) {
-            cleanUTXOs = cleanUTXOs.concat(utxo)
+          let cleanUTXOs = {}
+          let spentUTXOs = {}
+          // 5. Remove unconfirmed spent inputs
+          results.forEach(function (txResult) {
+            Object.assign(cleanUTXOs, txResult.txUTXOs)
+            Object.assign(spentUTXOs, txResult.spentUnconfirmed)
           })
+          // 6. Concatenate all found unspents
+          let unspentList = Object.keys(cleanUTXOs)
+            .filter((key) => !spentUTXOs[key])
+            .map((unspent) => cleanUTXOs[unspent])
+
           if (self.options.network === bch.Networks.testnet) {
             console.log('TESTNET ENABLED: Clipping UTXO length to 2 for test purposes')
-            cleanUTXOs = cleanUTXOs.slice(0, 2)
+            unspentList = unspentList.slice(0, 2)
           }
-          done(null, cleanUTXOs)
+          done(null, unspentList)
         }
       })
     }
   })
+}
+/* Example body
+{
+  'txid': '2a9f1c86b74e7efaabcfae4c8c694e87d5ab45c483a75232e86fc4951e22ee94',
+  'version': 1,
+  'vin': [
+    {
+      'txid': '2a845e04a2ad0cc3ba137c53100d313b13a19880e81f92a9766db6ee3aaa013a',
+      'vout': 1,
+      'sequence': 4294967295,
+      'n': 0,
+      'scriptSig': {
+        'hex': '483045022100ac27a0908cf45299bb1ca6453016ed8e6358a3a974873749f7f45eaa82126b11022070928fc0e4813b6dd5899410f26f41c127214ce9bd6c482f8332d19f5a2cfc22412103bfcf2a935cbde4b67ea1ca1e9db98401965fa361f97c4d14a8b1ec77bbdd62db'
+      },
+      'addresses': [
+        'bitcoincash:qrcz4kes5jtktk66mf0508g49h4fs5f8zstpt3f0jc'
+      ],
+      'value': '0.02779757'
+    }
+  ],
+  'vout': [
+    {
+      'value': '0.02778757',
+      'n': 0,
+      'scriptPubKey': {
+        'hex': '76a914f02adb30a49765db5ada5f479d152dea9851271488ac',
+        'addresses': [
+          'bitcoincash:qrcz4kes5jtktk66mf0508g49h4fs5f8zstpt3f0jc'
+        ]
+      },
+      'spent': false
+    }
+  ],
+  'blockheight': 0,
+  'confirmations': 0,
+  'blocktime': 0,
+  'valueOut': '0.02778757',
+  'valueIn': '0.02779757',
+  'fees': '0.00001',
+  'hex': '01000000013a01aa3aeeb66d76a9921fe88098a1133b310d10537c13bac30cada2045e842a010000006b483045022100ac27a0908cf45299bb1ca6453016ed8e6358a3a974873749f7f45eaa82126b11022070928fc0e4813b6dd5899410f26f41c127214ce9bd6c482f8332d19f5a2cfc22412103bfcf2a935cbde4b67ea1ca1e9db98401965fa361f97c4d14a8b1ec77bbdd62dbffffffff0185662a00000000001976a914f02adb30a49765db5ada5f479d152dea9851271488ac00000000'
+}
+*/
+function getOutputsFromTransaction (body, address) {
+  let txUTXOs = {}
+  body.vout.forEach(function (vout) {
+    // 4. Is the output unspent and to the current address?
+    if (vout.spent === false && vout.scriptPubKey.addresses[0] === address) {
+      txUTXOs[body.txid + '-' + vout.n] = {
+        txId: body.txid,
+        outputIndex: vout.n,
+        script: vout.scriptPubKey.hex,
+        address: standardizeAddress(address),
+        amount: parseFloat(vout.value),
+        satoshis: valueToSatoshis(vout.value)
+      }
+    }
+  })
+  return txUTXOs
+}
+
+function getSpentUTXOsFromTransaction (body) {
+  let spentUnconfirmed = {}
+  body.vin.forEach(function (vin) {
+    spentUnconfirmed[vin.txid + '-' + vin.vout] = {
+      txid: vin.txid,
+      voud: vin.vout
+    }
+  })
+  return spentUnconfirmed
 }
 
 function valueToSatoshis (value) {
@@ -206,6 +285,7 @@ function randomIntFromInterval (min, max) { // min and max included
   return Math.floor(Math.random() * (max - min + 1) + min)
 }
 
+/* WARN: Remote request - Don't run on light client. */
 BitcoinCashDepositUtils.prototype.getSweepTransaction = function (xprv, path, to, utxo, feePerByte) {
   let self = this
   let transaction = new bch.Transaction()
@@ -227,29 +307,14 @@ BitcoinCashDepositUtils.prototype.getSweepTransaction = function (xprv, path, to
   return { signedTx: transaction.toString(), txid: transaction.toObject().hash }
 }
 
-BitcoinCashDepositUtils.prototype.broadcastTransaction = function (txObject, done, retryUrl, originalResponse) {
+/* WARN: Remote request - Don't run on light client. */
+BitcoinCashDepositUtils.prototype.broadcastTransaction = function (txObject, done) {
   let self = this
-  let textBody = '{"rawtx":"' + txObject.signedTx + '"}'
-  const broadcastHeaders = {
-    'pragma': 'no-cache',
-    'cookie': '__cfduid=d365c2b104e8c0e947ad9991de7515e131528318303',
-    'origin': 'https://bitcoincash.blockexplorer.com',
-    'accept-encoding': 'gzip, deflate, br',
-    'accept-language': 'en-US,en;q=0.9,fr;q=0.8,es;q=0.7',
-    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.99 Safari/537.36',
-    'content-type': 'application/json;charset=UTF-8',
-    'accept': 'application/json, text/plain, */*',
-    'cache-control': 'no-cache',
-    'authority': 'blockexplorer.com',
-    'referer': 'https://bitcoincash.blockexplorer.com/tx/send'
-  }
-  let url
-  if (retryUrl) url = retryUrl
-  else url = self.options.insightUrl
+  let textBody = txObject.signedTx
+  let url = selectRandomURL(self) + 'api/sendtx/'
   var options = {
-    url: url + 'tx/send',
+    url: url,
     method: 'POST',
-    headers: broadcastHeaders,
     body: textBody
   }
   request(options, function (error, response, body) {
@@ -257,16 +322,12 @@ BitcoinCashDepositUtils.prototype.broadcastTransaction = function (txObject, don
       txObject.broadcasted = true
       done(null, txObject)
     } else {
-      if (url !== retryUrl) { // First broadcast attempt. Lets try again.
-        self.broadcastTransaction(txObject, done, self.options.backupBroadcastUrl, body)
-      } else {
-        // Second attempt failed
-        done(new Error('unable to broadcast. Some debug info: ' + body.toString() + ' ---- ' + originalResponse.toString()))
-      }
+      return done(new Error('Broadcast error: ' + response.statusCode + ' ' + url + ' ' + body + '' + error))
     }
   })
 }
 
+/* WARN: Remote request - Don't run on light client. */
 BitcoinCashDepositUtils.prototype.sweepTransaction = function (xpub, xprv, path, to, feePerByte, done) {
   let self = this
   self.getUTXOs(xpub, path, function (err, utxo) {

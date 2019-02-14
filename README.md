@@ -57,7 +57,9 @@ You have been warned!
 # Version History
 
 ## 0.1.0
+- Major Breaking Change
 - Move to Blockbook from Insight
+- Return cashaddr:q.. addresses directly
 
 ## License
 

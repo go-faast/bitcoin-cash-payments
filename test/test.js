@@ -29,7 +29,7 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
   it('getDepositAddress for 0/1', function (done) {
     pubAddress = BitcoinCashDepositUtils.bip44(xpub44Bch, 1)
     // console.log(pubAddress)
-    expect(pubAddress).to.equal('qrcz4kes5jtktk66mf0508g49h4fs5f8zstpt3f0jc')
+    expect(pubAddress).to.equal('bitcoincash:qrcz4kes5jtktk66mf0508g49h4fs5f8zstpt3f0jc')
     done()
   })
   it('validate generated address', function (done) {
@@ -71,6 +71,12 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
       done(err)
     })
   })
+  it('getBalance of addess on path', function (done) {
+    BitcoinCashDepositUtils.getBalance(BitcoinCashDepositUtils.bip44(xpub44Bch, 1), function (err, balance) {
+      if (err) console.log(err)
+      done(err)
+    })
+  })
   it('generate a new set of pub and priv keys', function (done) {
     let keys = BitcoinCashDepositUtils.generateNewKeys(entropy)
     expect(keys.xprv).to.equal('xprv9s21ZrQH143K3SPAc8jgfzFS4cFvbZBFCyDauH2pbBWuG2Vs1wvNAu6h6F3jsdakvPMbSdzNT6ESxnykGiQXgst5jkD21d2J5FTEiuLrxzn')
@@ -82,7 +88,7 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
   })
   // This test takes a long time. It really just makes sure we don't have padding
   // issues in a brute force way.
-  let regress = false
+  let regress = true
   if (regress) {
     it('generate 1000 addresses and private keys, make sure they match', function (done) {
       let keys = BitcoinCashDepositUtils.generateNewKeys(entropy)
@@ -106,7 +112,6 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
       let async = require('async')
       async.parallel(tasks, function (err, res) {
         expect(err).to.not.exist
-        // console.log(res)
         done(err)
       })
     })
@@ -117,17 +122,15 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
     BitcoinCashDepositUtils.getAddressUTXOs('bitcoincash:qqn4z4d3g5kc044munahy2wt05uek333lgwszmxgzw', function (err, utxos) {
       if (err) console.log(err)
       expect(utxos.length).above(0)
-      console.log(utxos.length)
-      console.log(utxos)
       done()
     })
   })
-  return
+
   let getUTXOs = true
   let currentUTXO = {}
   let currentSignedTx = {}
   if (getUTXOs) {
-    it('Get UTXOs for a single address', function (done) {
+    it('Get UTXOs for a path address', function (done) {
       BitcoinCashDepositUtils.getUTXOs(xpub44Bch, 1, function (err, utxos) {
         if (err) console.log(err)
         expect(utxos.length).above(0)
@@ -151,7 +154,10 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
   if (broadcast) {
     it('Broadcast a sweep transaction for a single address', function (done) {
       BitcoinCashDepositUtils.broadcastTransaction(currentSignedTx, function (err, txHash) {
-        if (err) console.log(err)
+        if (err) {
+          // console.log(err)
+          done(err)
+        }
         // expect(txHash).to.deep.equal(txHashExpected)
         expect(txHash.signedTx).to.exist
         expect(txHash.txid).to.exist
@@ -160,10 +166,4 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
       })
     })
   }
-  it('Sweep transaction for a single address', function (done) {
-    // BitcoinCashDepositUtils.sweepTransaction(xprv, 2, to, function (err, sweptTransaction) {
-    //
-    // })
-    done()
-  })
 })
