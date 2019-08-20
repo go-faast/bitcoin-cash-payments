@@ -17,7 +17,7 @@ let pubAddress = ''
 let entropy = 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'
 
 let BitcoinCashDepositUtils = require('../index')({
-  insightUrl: 'https://bitcoincash.blockexplorer.com/api/',
+  insightUrl: 'https://blockdozer.com/insight-api/',
   network: 'mainnet'
 })
 describe('Mainnet BitcoinCashDepositUtils', function () {
@@ -118,6 +118,7 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
     it('Get UTXOs for a single address', function (done) {
       BitcoinCashDepositUtils.getUTXOs(xpub44Bch, 1, function (err, utxos) {
         if (err) console.log(err)
+        console.log(utxos)
         expect(utxos.length).above(0)
         currentUTXO = utxos
         done()
