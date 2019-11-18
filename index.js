@@ -1,17 +1,15 @@
 const bch = require('bitcoincashjs')
 const bchaddr = require('bchaddrjs')
 const request = require('request')
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-console.log('SECURITY WARNING: BCH PAYMENTS DEPRECATED - PLEASE UPGRADE TO 0.2.0 - SSL NOT ENFORCED')
 const MIN_RELAY_FEE = 1000
 const DEFAULT_SAT_PER_BYTE = 1
 const CASH_ADDR_FORMAT = bch.Address.CashAddrFormat
 function BitcoinCashDepositUtils (options) {
   if (!(this instanceof BitcoinCashDepositUtils)) return new BitcoinCashDepositUtils(options)
-  let self = this
+  const self = this
   self.options = Object.assign({}, options || {})
   if (!self.options.insightUrl) {
-    self.options.insightUrl = 'https://blockdozer.com/insight-api/'
+    self.options.insightUrl = 'https://bch2.trezor.io/'
     console.log('WARN: Using default bch block explorer. It is highly suggested you set one yourself!', self.options.insightUrl)
   }
 
@@ -21,12 +19,12 @@ function BitcoinCashDepositUtils (options) {
   if (!self.options.network || (self.options.network === 'mainnet')) {
     self.options.network = bch.Networks.livenet
     if (!self.options.backupBroadcastUrl) {
-      self.options.backupBroadcastUrl = 'https://blockdozer.com/insight-api/'
+      self.options.backupBroadcastUrl = 'https://bch2.trezor.io/'
     }
   } else if (self.options.network === 'testnet') {
     self.options.network = bch.Networks.testnet
     if (!self.options.backupBroadcastUrl) {
-      self.options.backupBroadcastUrl = 'https://blockdozer.com/insight-api/'
+      self.options.backupBroadcastUrl = 'https://bch2.trezor.io/'
     }
   } else {
     return new Error('Invalid network provided ' + self.options.network)
@@ -36,11 +34,11 @@ function BitcoinCashDepositUtils (options) {
 }
 
 BitcoinCashDepositUtils.prototype.bip44 = function (xpub, path) {
-  let self = this
-  let node = new bch.HDPublicKey(xpub)
-  let child = node.derive('m/0').derive(path)
-  let address = new bch.Address(child.publicKey, self.options.network)
-  let addrstr = address.toString(CASH_ADDR_FORMAT).split(':')
+  const self = this
+  const node = new bch.HDPublicKey(xpub)
+  const child = node.derive('m/0').derive(path)
+  const address = new bch.Address(child.publicKey, self.options.network)
+  const addrstr = address.toString(CASH_ADDR_FORMAT).split(':')
   if (addrstr.length === 2) {
     return addrstr[1]
   } else {
@@ -49,11 +47,11 @@ BitcoinCashDepositUtils.prototype.bip44 = function (xpub, path) {
 }
 
 BitcoinCashDepositUtils.prototype.getPrivateKey = function (xprv, path) {
-  let self = this
+  const self = this
   if (!xprv) throw new Error('Xprv is null. Bad things will happen to you.')
-  let node = new bch.HDPrivateKey(xprv)
-  let child = node.derive("m/44'/145'/0'/0").derive(0).derive(path)
-  let privateKey = new bch.PrivateKey(child.privateKey, self.options.network)
+  const node = new bch.HDPrivateKey(xprv)
+  const child = node.derive("m/44'/145'/0'/0").derive(0).derive(path)
+  const privateKey = new bch.PrivateKey(child.privateKey, self.options.network)
   return privateKey.toWIF()
 
 // const node = bch.HDNode.fromBase58(xprv, self.options.network)
@@ -63,10 +61,10 @@ BitcoinCashDepositUtils.prototype.getPrivateKey = function (xprv, path) {
 }
 
 BitcoinCashDepositUtils.prototype.privateToPublic = function (privateKey) {
-  let self = this
-  let PrivateKey = bch.PrivateKey
-  let address = PrivateKey.fromWIF(privateKey).toAddress(self.options.network)
-  let addrstr = address.toString(CASH_ADDR_FORMAT).split(':')
+  const self = this
+  const PrivateKey = bch.PrivateKey
+  const address = PrivateKey.fromWIF(privateKey).toAddress(self.options.network)
+  const addrstr = address.toString(CASH_ADDR_FORMAT).split(':')
   if (addrstr.length === 2) {
     return addrstr[1]
   } else {
@@ -87,7 +85,7 @@ BitcoinCashDepositUtils.prototype.validateAddress = function (address) {
     error: 'Human readable error message'
   }
   */
-  let resp = {
+  const resp = {
     valid: bchaddr.isCashAddress(address),
     network: 'TBD'
   }
@@ -98,7 +96,7 @@ BitcoinCashDepositUtils.prototype.validateAddress = function (address) {
 }
 
 BitcoinCashDepositUtils.prototype.generateNewKeys = function (entropy) {
-  let self = this
+  const self = this
   var root = bch.HDPrivateKey.fromSeed(entropy, self.options.network)
   return {
     xprv: root.xprivkey,
@@ -107,29 +105,37 @@ BitcoinCashDepositUtils.prototype.generateNewKeys = function (entropy) {
 }
 
 BitcoinCashDepositUtils.prototype.getXpubFromXprv = function (xprv) {
-  let node = new bch.HDPrivateKey(xprv)
-  let child = node.derive("m/44'/145'/0'/0")
+  const node = new bch.HDPrivateKey(xprv)
+  const child = node.derive("m/44'/145'/0'/0")
   return child.xpubkey
 }
 
 BitcoinCashDepositUtils.prototype.getBalance = function (address, done) {
-  let self = this
-  let url = self.options.insightUrl + 'addr/' + address
-  request.get({json: true, url: url}, function (err, response, body) {
+  const self = this
+  const url = self.options.insightUrl + 'api/v1/address/' + address
+  request.get({ json: true, url: url }, function (err, response, body) {
     if (!err && response.statusCode !== 200) {
       return done(new Error('Unable to get balance from ' + url))
     } else {
-      done(null, {balance: body.balance, unconfirmedBalance: body.unconfirmedBalance})
+      let balance, unconfirmedBalance
+      try {
+        balance = Number.parseFloat(body.balance)
+        unconfirmedBalance = Number.parseFloat(body.unconfirmedBalance)
+      } catch (error) {
+        return done(new Error('Unable to parse balance to number'))
+      }
+      return done(null, { balance: balance, unconfirmedBalance: unconfirmedBalance })
     }
   })
 }
 
 BitcoinCashDepositUtils.prototype.getUTXOs = function (xpub, path, done) {
-  let self = this
-  let address = self.bip44(xpub, path)
+  const self = this
+  const address = self.bip44(xpub, path)
   // console.log('sweeping ', address)
-  let url = self.options.insightUrl + 'addr/' + address + '/utxo'
-  request.get({json: true, url: url}, function (err, response, body) {
+  const scriptPubKey = bch.Script.fromAddress(self.standardizeAddress(address)).toHex()
+  const url = self.options.insightUrl + 'api/v1/utxo/' + self.standardizeAddress(address)
+  request.get({ json: true, url: url }, function (err, response, body) {
     if (!err && response.statusCode !== 200) {
       return done(new Error('Unable to get UTXOs from ' + url))
     } else {
@@ -137,15 +143,14 @@ BitcoinCashDepositUtils.prototype.getUTXOs = function (xpub, path, done) {
       body.forEach(function (utxo) {
         utxo.txId = utxo.txid
         utxo.outputIndex = utxo.vout
-        utxo.script = utxo['scriptPubKey']
-        utxo.address = self.standardizeAddress(utxo.address)
-        delete utxo['confirmations']
-        delete utxo['height']
-        delete utxo['ts']
+        utxo.script = scriptPubKey // TODO: Convert address to script!
+        utxo.address = self.standardizeAddress(address)
+        delete utxo.confirmations
+        delete utxo.height
         cleanUTXOs.push(utxo)
       })
       if (self.options.network === bch.Networks.testnet) {
-        console.log('TESTNET ENABLED: Clipping UTXO length to 2 for test purposes')
+        console.log('TEST ENABLED: Clipping UTXO length to 2 for test purposes')
         cleanUTXOs = cleanUTXOs.slice(0, 2)
       }
       done(null, cleanUTXOs)
@@ -153,8 +158,8 @@ BitcoinCashDepositUtils.prototype.getUTXOs = function (xpub, path, done) {
   })
 }
 BitcoinCashDepositUtils.prototype.getSweepTransaction = function (xprv, path, to, utxo, feePerByte) {
-  let self = this
-  let transaction = new bch.Transaction()
+  const self = this
+  const transaction = new bch.Transaction()
   let totalBalance = 0
   if (utxo.length === 0) {
     return new Error('no UTXOs')
@@ -174,50 +179,39 @@ BitcoinCashDepositUtils.prototype.getSweepTransaction = function (xprv, path, to
 }
 
 BitcoinCashDepositUtils.prototype.broadcastTransaction = function (txObject, done, retryUrl, originalResponse) {
-  let self = this
-  let textBody = '{"rawtx":"' + txObject.signedTx + '"}'
-  const broadcastHeaders = {
-    'pragma': 'no-cache',
-    'cookie': '__cfduid=d365c2b104e8c0e947ad9991de7515e131528318303',
-    'origin': 'https://blockdozer.com/',
-    'accept-encoding': 'gzip, deflate, br',
-    'accept-language': 'en-US,en;q=0.9,fr;q=0.8,es;q=0.7',
-    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.99 Safari/537.36',
-    'content-type': 'application/json;charset=UTF-8',
-    'accept': 'application/json, text/plain, */*',
-    'cache-control': 'no-cache',
-    'authority': 'blockexplorer.com',
-    'referer': 'https://blockdozer.com/tx/send'
-  }
-  let url
-  if (retryUrl) url = retryUrl
-  else url = self.options.insightUrl
+  const self = this
+  const textBody = txObject.signedTx
   var options = {
-    url: url + 'tx/send',
-    method: 'POST',
-    headers: broadcastHeaders,
-    body: textBody
+    url: self.options.insightUrl + 'api/v1/sendtx/' + textBody,
+    method: 'GET',
+    json: true
   }
   request(options, function (error, response, body) {
-    if (!error && response.statusCode === 200) {
-      txObject.broadcasted = true
-      done(null, txObject)
+    if (error) {
+      console.log(error)
+      return done(new Error('Unable to broadcast', error))
+    } else if (!body) {
+      return done(new Error('Unable to broadcast, no response'))
     } else {
-      if (url !== retryUrl) { // First broadcast attempt. Lets try again.
-        self.broadcastTransaction(txObject, done, self.options.backupBroadcastUrl, body)
+      if (body.error) {
+        return done(new Error('Unable to broadcast, error:', body.error))
       } else {
-        // Second attempt failed
-        done(new Error('unable to broadcast. Some debug info: ' + body.toString() + ' ---- ' + originalResponse.toString()))
+        if (body.result) {
+          txObject.broadcasted = true
+          done(null, txObject)
+        } else {
+          return done(new Error('Unable to broadcast, error:', body))
+        }
       }
     }
   })
 }
 
 BitcoinCashDepositUtils.prototype.sweepTransaction = function (xpub, xprv, path, to, feePerByte, done) {
-  let self = this
+  const self = this
   self.getUTXOs(xpub, path, function (err, utxo) {
     if (err) return done(err)
-    let signedTx = self.getSweepTransaction(xprv, path, to, utxo, feePerByte)
+    const signedTx = self.getSweepTransaction(xprv, path, to, utxo, feePerByte)
     self.broadcastTransaction(signedTx, done)
   })
 }

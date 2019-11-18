@@ -17,7 +17,7 @@ let pubAddress = ''
 let entropy = 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'
 
 let BitcoinCashDepositUtils = require('../index')({
-  insightUrl: 'https://blockdozer.com/insight-api/',
+  insightUrl: 'https://bch2.trezor.io/',
   network: 'mainnet'
 })
 describe('Mainnet BitcoinCashDepositUtils', function () {
@@ -125,7 +125,7 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
       })
     })
   }
-
+  let txHashExpected = ''
   it('Generate a sweep transaction for a single address', function (done) {
     let to = BitcoinCashDepositUtils.bip44(xpub44Bch, 1)
     let signedtx = BitcoinCashDepositUtils.getSweepTransaction(xprv, 1, to, currentUTXO)
@@ -133,6 +133,7 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
     // expect(signedtx).to.deep.equal(signedTxExpected)
     expect(signedtx.signedTx).to.exist
     expect(signedtx.txid).to.exist
+    txHashExpected = signedtx.txid
     currentSignedTx = signedtx
     done()
   })
@@ -141,18 +142,11 @@ describe('Mainnet BitcoinCashDepositUtils', function () {
     it('Broadcast a sweep transaction for a single address', function (done) {
       BitcoinCashDepositUtils.broadcastTransaction(currentSignedTx, function (err, txHash) {
         if (err) console.log(err)
-        // expect(txHash).to.deep.equal(txHashExpected)
         expect(txHash.signedTx).to.exist
-        expect(txHash.txid).to.exist
+        expect(txHash.txid).to.deep.equal(txHashExpected)
         expect(txHash.broadcasted).to.equal(true)
         done()
       })
     })
   }
-  it('Sweep transaction for a single address', function (done) {
-    // BitcoinCashDepositUtils.sweepTransaction(xprv, 2, to, function (err, sweptTransaction) {
-    //
-    // })
-    done()
-  })
 })

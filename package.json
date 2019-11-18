@@ -1,6 +1,6 @@
 {
   "name": "bitcoin-cash-payments",
-  "version": "0.0.4",
+  "version": "0.2.0",
   "description": "lightweight bitcoin cash payment processing with bip44",
   "main": "index.js",
   "directories": {
